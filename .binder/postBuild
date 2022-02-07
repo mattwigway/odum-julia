@@ -1,0 +1,1 @@
+wget -q -o data/bay_area_freeways.csv https://files.indicatrix.org/bay_area_freeways.csv
