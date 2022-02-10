@@ -1,1 +1,4 @@
 curl https://files.indicatrix.org/bay_area_freeways.csv.gz | gunzip > data/bay_area_freeways.csv
+
+julia --project .scripts/build_sysimage.jl
+python .scripts/install_kernel.py
