@@ -1,0 +1,5 @@
+{
+    "Repo2Docker": {
+        "extra_build_kwargs":{"platform":"linux/amd64"}
+    }
+}
