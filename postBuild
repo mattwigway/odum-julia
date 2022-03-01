@@ -1,1 +1,0 @@
-curl https://files.indicatrix.org/bay_area_freeways.csv.gz | gunzip > data/bay_area_freeways.csv
