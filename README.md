@@ -4,7 +4,7 @@ This repository contains all of the code for the [Odum Institute](https://odum.u
 
 ## Local usage
 
-1. Download [Julia](https://julialang.org).
+1. Download and install [Julia](https://julialang.org).
 2. Download this code repository and extract it, either [as a ZIP](https://github.com/mattwigway/odum-julia/archive/refs/heads/main.zip) or via Git if you're familiar with it.
 3. Open a command prompt. On Mac, open the Terminal application. On Windows, open CMD, PowerShell or WSL. Use the `cd` command to navigate to the directory where you extracted the zip, e.g. `cd ~/Downloads/odum-julia` or `cd C:\Users\username\Downloads\odum-julia`, replacing with the correct paths and putting double quotes around the path if it contains special characters. [This guide should get you started if you're not familiar with the command line](https://developer.mozilla.org/en-US/docs/Learn/Tools_and_testing/Understanding_client-side_tools/Command_line)
 4. Make sure you're in the right directory. Type `ls` and confirm that you see the `1 Reading Data into Julia.ipynb` file.
