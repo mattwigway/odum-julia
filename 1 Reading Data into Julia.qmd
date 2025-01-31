@@ -1,0 +1,192 @@
+---
+title: Reading data into Julia
+jupyter:
+  kernelspec:
+    display_name: Julia 1.8.0
+    language: julia
+    name: julia-1.8
+---
+
+
+This notebooks demonstrates reading data into Julia and performing basic manipulations.
+
+
+## Load libraries
+
+First, we need to load the libraries we will be working with. In Julia, functionality tends to be split between libraries much more than it is in other languages such as Python or R. To read data from a CSV file, we need two libraries: CSV and DataFrames. We also load the StatsBase package, which contains many basic statistical functions (mean, standard deviation, etc.). DataFramesMeta provides some additional syntax to make analysis more readable. The data are too big to put in a Github repository, so the Downloads module is used to download the data if needed. You can run the code cell by putting your cursor in it and pressing Ctrl-enter (Cmd-enter on Mac).
+
+```{julia}
+using CSV, DataFrames, StatsBase, DataFramesMeta
+```
+
+## Getting the data
+
+The exercise data is too large to put in the repository directly, so this code will download it if you have not already. The compressed CSV file is still 138 MB, so it may take a minute or two depending on the speed of your connection.
+```{julia}
+include("download_data.jl")
+download_data()
+```
+
+## Reading data
+
+Since CSV reading and tabular data manipulation are split across libraries, we use the `CSV.read` function to load data into a `DataFrame`. CSV.jl knows how to read a gzip-compressed file, so we do not need to decompress the data. This is useful for saving space with large CSV files (this one is 685 MB uncompressed). If you often work with very large datasets, [Parquet](https://github.com/JuliaIO/Parquet.jl) may be a better option.
+
+Unlike many other languages, Julia in an interactive session will print out the result of an operation, even if you assign it to a variable. To prevent this, add a semicolon at the end of the last line.
+
+```{julia}
+sensors = CSV.read("data/bay_area_freeways.csv.gz", DataFrame)
+```
+
+## Accessing data in a loaded table
+
+Once the data is loaded, we can access it by column or by row. Each column is a Vector (known as an array or list in other languages).
+
+```{julia}
+sensors.avg_occ
+```
+
+## Computing functions of columns
+
+Many functions in Julia are defined for Vectors of numbers—for instance, the mean.
+
+```{julia}
+mean(sensors.avg_occ)
+```
+
+## Dealing with missing data
+
+Datasets often have missing values. Julia represents these with the special value `missing`. Math with `missing` will generally result in `missing`, to avoid confusion when you don't use all the data you think you should. You can remove the missing values with `skipmissing`, and find them with `ismissing`.
+
+```{julia}
+sum(ismissing.(sensors.avg_occ))
+```
+
+```{julia}
+mean(skipmissing(sensors.avg_occ))
+```
+
+You may notice that there is a `.` after `ismissing` above, but not after `skipmissing`. The reason for this is that `ismissing` is a scalar function (i.e. only works with one value at a time). If we were to leave off the period, it would lead us to believe nothing is missing, but what this is actually telling us is that the column itself is a Vector rather than the special value `missing`.
+
+```{julia}
+sum(ismissing(sensors.avg_occ))
+```
+
+Adding a `.` after any function in Julia automatically _broadcasts_ that operation over vectors of argument, for example:
+
+```{julia}
+log.(sensors.avg_occ)
+```
+
+## Filtering data
+
+You can also filter by rows by using logical operators. Like functions, they can be applied elementwise with a . operator, but the . goes before the operator. We have to explicitly specify that we want all columns (`:`)
+
+```{julia}
+sensors[sensors.avg_occ .> 0.05,:]
+```
+
+## Missing data, again
+
+We get an error with the above command, because of the missing value, again. Julia doesn't know whether the missing value was greater than 0.05. We can use the `coalesce` function to make an assumption that it was not. `coalesce` returns its first nonmissing argument. In this case, we will use it with a `.` operator to apply to the entire array.
+
+```{julia}
+sensors[coalesce.(sensors.avg_occ .> 0.05, false),:]
+```
+
+## Removing missing data
+
+Alternately, we can just remove the missing data. This is pretty easy to do with the `ismissing` function and the filtering we've seen above.
+
+```{julia}
+sensors = sensors[.!ismissing.(sensors.avg_occ),:]
+```
+
+## Assertions
+
+It's a good idea to add assertions within your code regularly. You write out a check that should be true, and if it is not an error will be printed.
+
+```{julia}
+# this will print no output if there are no missing sensors
+@assert !any(ismissing.(sensors.avg_occ))
+```
+
+```{julia}
+# but if the assertion fails, you'll get an error
+@assert all(sensors.avg_occ .< 0.05)
+```
+
+### Logical operators
+
+`sensors.avg_occ .> 0.05` is nothing particularly special, it's just creating a vector of boolean values, one for each row of the data, indicating whether that row has `avg_occ` > 0.05.
+
+```{julia}
+sensors.avg_occ .> 0.05
+```
+
+## Confusion with broadcasting and multiple arguments
+
+Whenever you apply a broadcasted operation to two vectors, Julia tries to broadcast over both of them in parallel - i.e. apply the function to the first element of each vector, then the second, and so on. This is extremely useful because it allows mathematical operations between columns, e.g. here calculating the number of observed samples based on the total number of samples and the percent that were observed rather than imputed.
+
+```{julia}
+obs_samples = sensors.samples .* sensors.pct_obs ./ 100
+```
+
+However, sometimes broadcasting can be confusing when using a function with multiple arguments. For instance, you might think that this would select only observations from East or Westbound freeways:
+
+```{julia}
+#| error: true
+ew = sensors[sensors.direction .∈ ["E", "W"], :]
+```
+
+(∈ is the set containment operator (read it as "in"). You can type it at the Julia REPL by typing \in and pressing tab, and in VSCode by typing \in and accepting the autocompletion to ∈.)
+
+Instead of what we expected, we got an error that "arrays could not be broadcast to a common size: a has axes Base.OneTo(10662146) and b has axes Base.OneTo(2)." The reason for this is that `[N, S]` is also a vector, and Julia is trying to broadcast over both vectors and erroring because they are different lengths. We can solve this by using the `Ref` function to wrap the second array and force Julia to treat it as a scalar (i.e. use its value for every operation).
+
+```{julia}
+ew = sensors[sensors.direction .∈ Ref(["E", "W"]), :]
+```
+
+## Split-apply-combine
+
+Split-apply-combine is a common pattern in many other data manipulation languages (e.g. groupby in Python, group_by %>% summarize in R). This pattern involves dividing the dataset based on the values of certain variables, applying operations to each subset, and combining the results - most often into a single row per group. For instance, we can compute mean occupancy by freeway and direction, below.
+
+In Julia, we use the `groupby` and `combine` functions for this. We reference variable names by placing a : in front of them, or putting them in double quotes if they contain spaces, dashes, or start with a number. There are multiple ways to write out this operation; this uses plain Julia syntax to pass the result of the groupby into the combine operation.
+
+```{julia}
+combine(
+    # Group the data by these variables. You only need [] if you are grouping by multiple variables.
+    groupby(sensors, [:freeway_number, :direction]),
+    # and create a new variable mean_avg_occ by applying the mean() function to the avg_occ column in
+    # each subset of the data
+    :avg_occ => mean => :mean_avg_occ
+)
+```
+
+A more readable way to write this is as a "chain," where we write out multiple function calls in order, and the result of each function call is used as the first argument to the next. If you've used `tidyverse` in R this will be familiar. This code does exactly the same thing as the code in the previous cell.
+
+```{julia}
+@chain sensors begin
+    # Group the data by these variables. You only need [] if you are grouping by multiple variables.
+    groupby([:freeway_number, :direction])
+    # and create a new variable mean_avg_occ by applying the mean() function to the avg_occ column in
+    # each subset of the data
+    combine(:avg_occ => mean => :mean_avg_occ)
+end
+```
+
+## Joins
+
+A very common operation is to join data sources together using a common column. In Julia, we can use the `leftjoin` function to do this (other types of joins are available as well). We will add sensor metadata to the database.
+
+```{julia}
+meta = CSV.read("data/sensor_meta.csv", DataFrame)
+```
+
+```{julia}
+sensors = leftjoin(sensors, meta, on=:station=>:ID)
+```
+
+```{julia}
+sensors.Lanes
+```
+
