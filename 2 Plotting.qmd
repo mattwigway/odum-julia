@@ -1,0 +1,120 @@
+---
+title: Plotting
+---
+
+
+We often want to visualize our datasets. There are several plotting libraries for Julia - in this exercise, we will use the most common, [Plots.jl](https://github.com/JuliaPlots/Plots.jl).
+
+
+## Load libraries and data
+
+As before. This time, we put a semicolon after the `CSV.read` function so our whole table is not printed out.
+
+```{julia}
+using CSV, DataFrames, Plots, Dates, StatsBase
+```
+
+```{julia}
+sensors = CSV.read("data/bay_area_freeways.csv.gz", DataFrame);
+```
+
+## Create a simple scatter plot
+
+There are a lot of different types of plots that you can make with Plots.jl - we'll start with one of the most basic, a scatter plot. This might take a minute since it's plotting 10 million points. `fmt=:png` tells Julia to format the plot as a raster (pixel-based) image, so that the browser is not trying to render 10 million points itself—you won't need this for smaller plots.
+
+```{julia}
+scatter(sensors.avg_occ[1:1000], sensors.avg_speed_mph[1:1000], fmt=:png)
+```
+
+## Modify the parameters of that plot
+
+The points are very large, so it's hard to see any pattern. We can make them smaller and transparent. 
+
+```{julia}
+scatter(sensors.avg_occ, sensors.avg_speed_mph, fmt=:png, markersize=0.01, alpha=0.1)
+```
+
+# Make the plot prettier
+
+We should label our axes at least, and remove the legend. In Julia, by convention functions that end in ! modify already existing objects - in this case, the plot created by scatter.
+
+```{julia}
+scatter(sensors.avg_occ, sensors.avg_speed_mph, fmt=:png, markersize=0.01, alpha=0.1, legend=false)
+xlabel!("Average occupancy")
+ylabel!("Speed (mph)")
+```
+
+## Other types of plots
+
+We can plot the average occupancy by time of day for specific sensors, to better understand traffic patterns. We will use the sensors defined below, which are [east and westbound I-580 on the Altamont Pass](https://www.openstreetmap.org/#map=15/37.7266/-121.6534) and [east and westbound I-80 on the San Francisco–Oakland Bay Bridge](https://www.openstreetmap.org/#map=14/37.8047/-122.3640).
+
+```{julia}
+ALTAMONT_WEST = 402033
+ALTAMONT_EAST = 402031
+BAY_BR_WEST = 404918
+BAY_BR_EAST = 402817
+```
+
+### Create averages by time of day
+
+First, we need to create average occupancies for every hour of they day. To do this, we extract weekdays for these four sensors into a new dataset, then use split-apply-combine to extract the means.
+
+```{julia}
+sample = sensors[
+    (sensors.station .∈ Ref(Set([ALTAMONT_WEST, ALTAMONT_EAST, BAY_BR_WEST, BAY_BR_EAST]))) .&&
+    (Dates.dayabbr.(sensors.timestamp) .∈ Ref(Set(["Mon", "Tue", "Wed", "Thu", "Fri"]))), :]
+sample.hour = Dates.hour.(sample.timestamp)
+occ_by_hour = combine(
+    groupby(sample, [:station, :hour]),
+    :avg_occ => mean => :avg_occ
+    )
+```
+
+## Now, we can plot the data
+
+We can use the plot function for a line plot.
+
+Since we are plotting multiple series, we will add labels for each, and use the plot! function to add to the existing graph.
+
+Since we're only plotting 24 data points per sensor here, no need to use `fmt=:png` for performance.
+
+```{julia}
+plot(
+    occ_by_hour[occ_by_hour.station .== ALTAMONT_WEST, :hour], # x axis
+    occ_by_hour[occ_by_hour.station .== ALTAMONT_WEST, :avg_occ], # y axis
+    label="Altamont West"
+)
+
+plot!(
+    occ_by_hour[occ_by_hour.station .== ALTAMONT_EAST, :hour], # x axis
+    occ_by_hour[occ_by_hour.station .== ALTAMONT_EAST, :avg_occ], # y axis
+    label="Altamont East"
+)
+
+plot!(
+    occ_by_hour[occ_by_hour.station .== BAY_BR_WEST, :hour], # x axis
+    occ_by_hour[occ_by_hour.station .== BAY_BR_WEST, :avg_occ], # y axis
+    label="Bay Bridge West"
+)
+
+plot!(
+    occ_by_hour[occ_by_hour.station .== BAY_BR_EAST, :hour], # x axis
+    occ_by_hour[occ_by_hour.station .== BAY_BR_EAST, :avg_occ], # y axis
+    label="Bay Bridge East"
+)
+```
+
+## Histograms
+
+Histograms are another common type of plot for understanding a dataset. Plots.jl provides a histogram function to generate them.
+
+```{julia}
+histogram(sensors.avg_speed_mph, bins=40)
+xlabel!("Speed (mph)")
+```
+
+## Shut down the kernel!
+
+When done, choose Kernel -> Shut Down Kernel to free memory for the next exercise.
+
+
