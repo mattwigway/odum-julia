@@ -1,0 +1,137 @@
+---
+title: Statistics in Julia
+jupyter:
+  kernelspec:
+    display_name: Julia 1.8.0
+    language: julia
+    name: julia-1.8
+---
+
+
+This notebook will demonstrate how to do basic statistics and machine learning in Julia, including descriptive statistics, regression, and machine learning.
+
+
+```{julia}
+using DataFrames, CSV, StatsBase, StatsModels, GLM, MLJ, Dates, DataFramesMeta
+```
+
+```{julia}
+sensors = CSV.read("data/bay_area_freeways.csv.gz", DataFrame)
+sensors = sensors[.!ismissing.(sensors.avg_occ),:]
+```
+
+## Descriptive statistics
+
+StatsBase provides most common and many uncommon descriptive statistical measures (Kullback-Leibler divergence, anyone?). For instance, we can use the convenience function `describe()` to compute the mean and percentiles of a column, or the function `mean()` to get just the mean, or `cor()` for a Pearson's correlation.
+
+```{julia}
+describe(sensors.avg_speed_mph)
+```
+
+```{julia}
+mean(sensors.avg_speed_mph)
+```
+
+```{julia}
+cor(sensors.avg_speed_mph, sensors.avg_occ)
+```
+
+## Combining descriptive statistics with groupby
+
+We can also compute descriptive statistics for groups using groupby/split-apply-combine.
+
+```{julia}
+@chain begin
+    groupby(sensors, [:freeway_number, :direction])
+    combine(:avg_speed_mph => mean)
+end
+```
+
+## Fitting a linear regression
+
+Before we can fit a linear regression, we need to join the metadata to the sensor data, so we have enough covariates. Then, we'll use the `lm` function from [GLM.jl](https://juliastats.org/GLM.jl/stable/) to estimate a linear regression.
+
+```{julia}
+meta = CSV.read("data/sensor_meta.csv", DataFrame)
+sensors = leftjoin(sensors, meta, on=:station=>:ID);
+```
+
+```{julia}
+# also create an hour-of-day and day-of-week variable
+sensors.hour = Dates.hour.(sensors.timestamp)
+sensors.day_of_week = Dates.dayname.(sensors.timestamp);
+```
+
+```{julia}
+model = lm(@formula(avg_speed_mph ~ Lanes + day_of_week + hour), sensors, contrasts=Dict(:day_of_week=>DummyCoding(base="Monday"), :hour=>DummyCoding()))
+```
+
+### Model fit statistics
+
+The table printed above shows coefficients and statistics, but not any information about the model fit. We can examine the $R^2$, number of observations, etc. with functions of the model object.
+
+```{julia}
+r2(model)
+```
+
+```{julia}
+nobs(model)
+```
+
+## Machine learning
+
+Sometimes a linear regression might not be the right tool for the job. [MLJ.jl](https://github.com/alan-turing-institute/MLJ.jl) provides a common interface to many different machine learning functions available in Julia. We're going to build a random forest model similar to the linear regression above.
+
+```{julia}
+# first, we will load the MLJ RandomForestClassifier from the DecisionTree package
+RandomForestRegressor = @load RandomForestRegressor pkg=DecisionTree
+```
+
+### Creating our independent and dependent variables
+
+As before, we'll use Lanes, day of week, and hour to predict congestion. MLJ requires a data frames with independent variables, and a vector with the dependent variables. Since random forests can split ordinal data arbitrarily, we create a new numeric day of week variable to preserve ordering information. We're only using the first 100,000 observations in the interests of time, but you can use all 10 million and it will work - in about 15 minutes in this example.
+
+```{julia}
+sensors.day_of_week_number = Dates.dayofweek.(sensors.timestamp)
+X = sensors[1:100000, [:Lanes, :hour, :day_of_week_number]]
+# Sometimes a column will have a data type that is Union{Int64, Missing} (i.e. integers with missing values),
+# even if there are no missing values. Most MLJ models will not accept these columns. disallowmissing! will
+# change the types of these columns to just Int64 without missings, and throw an error if there actually were
+# any missing values.
+disallowmissing!(X)
+
+# We also need to tell it that this is a categorical variable, not a numeric one.
+y = sensors.avg_speed_mph[1:100000];
+```
+
+### Preventing overfitting
+
+As with any machine learning model, we want to evaluate our estimated model using separate training and test data to avoid overfitting. MLJ provides the `evaluate` function to use various test-error-rate estimation methods.
+
+```{julia}
+evaluate(RandomForestRegressor(max_depth=10), X, y; resampling=CV(nfolds=5), measure=rsq)
+```
+
+## Building a final model
+
+Usually we want to build a model on the full dataset once we're happy with the cross-validation results. We can then use this to predict future outcomes. To do this, we create a "machine" that associates the model we want to use with the data, and then call `fit!` on that machine. 
+
+```{julia}
+mach = machine(RandomForestRegressor(max_depth=10), X, y)
+```
+
+```{julia}
+fit!(mach)
+```
+
+## Predicting with our machine learning model
+
+Let's use our model to predict the speed on a 3-lane freeway at 8am on a Monday morning.
+
+```{julia}
+new_data = DataFrame(Dict(:Lanes=>[3], :hour_of_day=>[8], :day_of_week_number=>[1]))
+```
+
+```{julia}
+predictions = MLJ.predict(mach, new_data)
+```
