@@ -20,10 +20,15 @@ sensors = CSV.read("data/bay_area_freeways.csv.gz", DataFrame);
 
 ## Create a simple scatter plot
 
-There are a lot of different types of plots that you can make with Plots.jl - we'll start with one of the most basic, a scatter plot. This might take a minute since it's plotting 10 million points. `fmt=:png` tells Julia to format the plot as a raster (pixel-based) image, so that the browser is not trying to render 10 million points itself—you won't need this for smaller plots.
+We need to first work around an issue with plot display in Visual Studio Code; VSCode [currently crashes with plots that have too many points on them](https://discourse.julialang.org/t/plots-jl-fmt-png-still-creates-an-svg-plot-in-vscode/125463). Running the code below makes the plots display in a separate window.
+
+There are a lot of different types of plots that you can make with Plots.jl - we'll start with one of the most basic, a scatter plot. This might take a minute since it's plotting 10 million points.
+
+`fmt=:png` tells Julia to format the plot as a raster (pixel-based) image, so that Visual Studio Code is not trying to render 10 million points itself—you won't need this for smaller plots. At the moment this [is not working due to a bug in the Visual Studio Code Julia extension](https://discourse.julialang.org/t/plots-jl-fmt-png-still-creates-an-svg-plot-in-vscode/125463), so for larger plots we will save them as image files that we can look out outside VSCode.
 
 ```{julia}
-scatter(sensors.avg_occ[1:1000], sensors.avg_speed_mph[1:1000], fmt=:png)
+scatter(sensors.avg_occ, sensors.avg_speed_mph, fmt=:png);
+png("plots/occ_speed.png")
 ```
 
 ## Modify the parameters of that plot
@@ -32,6 +37,7 @@ The points are very large, so it's hard to see any pattern. We can make them sma
 
 ```{julia}
 scatter(sensors.avg_occ, sensors.avg_speed_mph, fmt=:png, markersize=0.01, alpha=0.1)
+png("plots/occ_speed_small.png")
 ```
 
 # Make the plot prettier
@@ -42,11 +48,12 @@ We should label our axes at least, and remove the legend. In Julia, by conventio
 scatter(sensors.avg_occ, sensors.avg_speed_mph, fmt=:png, markersize=0.01, alpha=0.1, legend=false)
 xlabel!("Average occupancy")
 ylabel!("Speed (mph)")
+png("plots/labeled.png")
 ```
 
 ## Other types of plots
 
-We can plot the average occupancy by time of day for specific sensors, to better understand traffic patterns. We will use the sensors defined below, which are [east and westbound I-580 on the Altamont Pass](https://www.openstreetmap.org/#map=15/37.7266/-121.6534) and [east and westbound I-80 on the San Francisco–Oakland Bay Bridge](https://www.openstreetmap.org/#map=14/37.8047/-122.3640).
+We can plot the average occupancy by time of day for specific sensors, to better understand traffic patterns. We will use the sensors defined below, which are [east and westbound I-580 on the Altamont Pass](https://www.openstreetmap.org/#map=15/37.7266/-121.6534) and [east and westbound I-80 on the San Francisco–Oakland Bay Bridge](https://www.openstreetmap.org/#map=14/37.8047/-122.3640). We do not need to save these plots as images, because they aggregate the data before plotting and are thus simple enough for VSCode to handle.
 
 ```{julia}
 ALTAMONT_WEST = 402033
@@ -113,8 +120,7 @@ histogram(sensors.avg_speed_mph, bins=40)
 xlabel!("Speed (mph)")
 ```
 
-## Shut down the kernel!
+## Other plotting libraries
 
-When done, choose Kernel -> Shut Down Kernel to free memory for the next exercise.
-
-
+- Gadfly (similar to ggplot)
+- Makie (high learning curve but good for extremely large datasets)
