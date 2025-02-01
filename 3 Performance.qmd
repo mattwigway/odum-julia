@@ -1,0 +1,172 @@
+---
+title: Performance
+jupyter:
+  kernelspec:
+    display_name: Julia 1.8.0
+    language: julia
+    name: julia-1.8
+---
+
+
+This notebook covers some of the most common performance tips for Julia.
+
+
+```{julia}
+using DataFrames, CSV, BenchmarkTools
+```
+
+```{julia}
+sensors = CSV.read("data/bay_area_freeways.csv.gz", DataFrame)
+sensors = sensors[.!ismissing.(sensors.avg_occ),:];
+```
+
+## Loops are okay
+
+One of the fundamental control structures of computer programming is the loop, which allows executing code repeatedly.
+
+If you're used to programming in other dynamic languages (R, Python, etc.) you've likely been told to avoid using loops at all costs. In those languages, loops are very slow, because they do not know the types of the data structures being operated on in the loops. Instead, you are told to "vectorize" - use operations that operate on a whole array of data at once (most `np.` functions in Python, `vapply` in R, etc.). These functions are implemented in efficient native code written in C or C++, and thus avoid the overhead of a loop. In Julia, vectorized operations are available; in fact, any function or operator can be vectorized by adding a .
+
+If you're used to programming in static languages (C, Fortran, Java, etc.), using loops is likely second nature. These languages do not suffer from the problems described above. Julia is a mix of static and dynamic, but loops are not in general slow in Julia.
+
+In fact, using a loop in Julia is often more efficient than using vectorized operations in either Julia or other languages. In the code below, we're counting up the number of periods where traffic sensors had speeds above or below 30 mph. Using a vectorized operation, you might create two arrays, with ones for each observation where speed is above or below 30 mph, respectively, then sum them. This requires allocating the memory to hold those arrays. Using a loop does not create any additional arrays or use additional memory, but just keeps track of the count as it goes.
+
+That said, if vectorized operations are more readable, there's nothing wrong with using them in Julia - vectorization is also fast in Julia, and the gains from using a loop are marginal and you should only try to optimize for speed over readability if speed really is an issue. Furthermore, Julia is "just-in-time compiled", which means the compiler will modify your code on the fly if it finds a faster way to achieve the same result, so in some cases vectorization may not be any slower after all.
+
+The `@time` macro will time whatever operation is to the right of it. The first time you run any piece of code, Julia needs to compile it, so for good benchmarking results you usually want to run the code twice (this is why Julia is sometimes criticized for having a "time-to-first-plot" problem; it initially takes a long time to start Julia and run code once, but after that Julia can be very fast).
+
+```{julia}
+@time begin
+    count_under30mph = 0
+    count_over30mph = 0
+    
+    for value in sensors.avg_speed_mph
+        if value > 30
+            count_over30mph += 1
+        elseif value ≤ 30
+            count_under30mph += 1
+        end
+    end
+end
+```
+
+## Use functions so Julia's type system can optimize performance-critical code
+
+```{julia}
+function compute_sensor_values(data)
+    count_under30mph = 0
+    count_over30mph = 0
+    
+    for value in data.avg_speed_mph
+        if value > 30
+            count_over30mph += 1
+        elseif value ≤ 30
+            count_under30mph += 1
+        end
+    end
+    
+    return count_under30mph, count_over30mph
+end
+```
+
+```{julia}
+@time compute_sensor_values(sensors)
+```
+
+## Use @code_warntype to see performance problems
+
+```{julia}
+@code_warntype compute_sensor_values(sensors)
+```
+
+## Fix performance problems by changing function parameters
+
+The problem is that DataFrames can contain any type of column, so Julia can't know that `avg_speed_mph` will always be a floating point number. There are several ways to fix this; the most straightforward is to pass the column as an argument to the function, rather than the entire data frame. Each column has a defined type.
+
+```{julia}
+function compute_sensor_values_column(column)
+    count_under30mph = 0
+    count_over30mph = 0
+    
+    for value in column
+        if value > 30
+            count_over30mph += 1
+        elseif value ≤ 30
+            count_under30mph += 1
+        end
+    end
+    
+    return count_under30mph, count_over30mph
+end
+```
+
+```{julia}
+@time compute_sensor_values_column(sensors.avg_speed_mph)
+```
+
+```{julia}
+@code_warntype compute_sensor_values_column(sensors.avg_speed_mph)
+```
+
+## Looping over the rows of a data frame
+
+Sometimes you want to loop over the rows of a data frame, not just a single column. Because the column types are unknown, this can be quite slow, even inside a function. For example, suppose we want to compute how often a sensor is actually detecting a car, not the estimated amount of time based on filling in gaps using imputation.
+
+```{julia}
+function loop_over_rows(data)
+    total = 0
+    count = 0
+    
+    for row in eachrow(data)
+        total += row.pct_obs / 100 * row.avg_occ
+        count += 1
+    end
+    
+    total / count
+end
+```
+
+```{julia}
+@time loop_over_rows(sensors)
+```
+
+```{julia}
+@code_warntype loop_over_rows(sensors)
+```
+
+```{julia}
+function stable_loop_over_rows(itr)
+    total = 0
+    count = 0
+    
+    for row in itr
+        total += row.pct_obs / 100 * row.avg_occ
+        count += 1
+    end
+    
+    total / count
+end
+```
+
+```{julia}
+@time stable_loop_over_rows(Tables.namedtupleiterator(sensors))
+```
+
+```{julia}
+@code_warntype stable_loop_over_rows(Tables.namedtupleiterator(sensors))
+```
+
+## Using vectorized operations
+
+A possibly more readable and not much slower way to do this is to use vectorized/broadcasted operations.
+
+```{julia}
+@time mean(sensors.pct_obs ./ 100 .* sensors.avg_occ)
+```
+
+## Benchmarking
+
+The `BenchmarkTools` package provides more advanced tools to do benchmarking. The main tool is the `@btime` macro. This will run your function many times and present the distribution of runtimes.
+
+```{julia}
+@btime mean(sensors.pct_obs ./ 100 .* sensors.avg_occ)
+```
