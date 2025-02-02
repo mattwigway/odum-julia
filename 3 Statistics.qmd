@@ -93,7 +93,7 @@ As before, we'll use Lanes, day of week, and hour to predict congestion. MLJ req
 
 ```{julia}
 sensors.day_of_week_number = Dates.dayofweek.(sensors.timestamp)
-X = sensors[1:100000, [:Lanes, :hour, :day_of_week_number]]
+X = sensors[1:100000, [:Lanes, :hour, :day_of_week_number, :station_len, :pct_obs]]
 # Sometimes a column will have a data type that is Union{Int64, Missing} (i.e. integers with missing values),
 # even if there are no missing values. Most MLJ models will not accept these columns. disallowmissing! will
 # change the types of these columns to just Int64 without missings, and throw an error if there actually were
@@ -129,9 +129,17 @@ fit!(mach)
 Let's use our model to predict the speed on a 3-lane freeway at 8am on a Monday morning.
 
 ```{julia}
-new_data = DataFrame(Dict(:Lanes=>[3], :hour_of_day=>[8], :day_of_week_number=>[1]))
+new_data = DataFrame(Dict(:Lanes=>[3], :hour_of_day=>[8], :day_of_week_number=>[1], :station_len=>[0.25], :pct_obs=>[100]))
 ```
 
 ```{julia}
 predictions = MLJ.predict(mach, new_data)
+```
+
+## Saving our model
+
+We will use it again when we talk about performance.
+
+```{julia}
+MLJ.save("randomforest.jls", mach)
 ```

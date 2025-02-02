@@ -1,0 +1,109 @@
+---
+title: Parallel computing
+---
+
+Modern computers usually have multiple CPU "cores". After about the mid-2000s, increases in the speed of individual CPUs stagnated, so computer manufacturers turned to just putting more than one CPU in a computer (nowadays, generally multiple CPU "cores" are integrated onto a single physical silicon chip—for instance, my laptop has eight CPUs, but they're all on one piece of silicon). Unlike making individual CPUs faster, though, this requires a lot of rethinking of code to make it work well. If you think of your code as a list of instructions, faster CPUs just means getting through the instructions faster. But multiple CPUs means having to work on multiple instructions at the same time. This can be difficult to reason about and prone to error.
+
+There are two types of parallel processing: multiprocessing and multithreading. Multiprocessing basically means running multiple Julia programs at once, possibly with communication betwen them. Multithreading means a single Julia program that is doing more than one thing simultaneously. To enable multithreading, you need to go to the Julia extension preferences and increase the number of threads (or use `--threads n` if starting Julia on the command line).
+
+```{julia}
+using CSV, DataFrames, Dates, ThreadsX, StatsBase, MLJ, Dates
+```
+
+We will first confirm that we are in fact running with multiple threads. This will print the number of active threads. If it is 1, you need to make sure that the VSCode extension setting is changed as described above, and restart Julia.
+
+```{julia}
+Threads.nthreads()
+```
+
+```{julia}
+sensors = CSV.read("data/bay_area_freeways.csv.gz", DataFrame)
+meta = CSV.read("data/sensor_meta.csv", DataFrame)
+sensors = leftjoin(sensors, meta, on=:station=>:ID)
+sensors = dropmissing(sensors);
+```
+
+There are low-level tools in Julia to build your own multithreaded procedures (see in particular `Threads.@threads` and `Threads.@spawn`), but 99% of the time it is better and less prone to error to use higher-level threading libraries. We'll look at multithreading using the `ThreadsX` and `DataFrames` libraries.
+
+The simplest is `ThreadsX.map` which runs a function on each element of an input array. We need a somewhat computationally intensive algorithm to demonstrate the power of multithreading. Julia is so fast that it really only makes sense to do this when you have a complex operation. Most of what we've done so far isn't really complex; the elementwise operations we've been doing take only a few milliseconds even on a dataset with ten million rows. What we are going to do instead is get the predicted value from our random forest for every observation.
+
+
+```{julia}
+# reload the model
+mach = machine("randomforest.jls")
+
+sensors.day_of_week_number = Dates.dayofweek.(sensors.timestamp)
+sensors.hour = Dates.hour.(sensors.timestamp)
+```
+
+The naive way to do this is to just use predict, like we've done before
+```{julia}
+X = sensors[!, [:Lanes, :hour, :day_of_week_number, :station_len, :pct_obs]]
+@time sensors.predicted_speed_mph = MLJ.predict(mach, X)
+```
+
+We can also use ThreadsX.map to apply this in parallel. We also see new syntax here, a do-block, which is a more readable way to create a function that is passed to another function.
+
+```{julia}
+@time sensors.predicted_speed_mph_parallel = ThreadsX.map(
+        zip(sensors.Lanes, sensors.hour, sensors.day_of_week_number, sensors.station_len, sensors.pct_obs)
+    ) do (lanes, hour, day, len, pct_obs)
+    first(MLJ.predict(mach, ((Lanes=lanes, hour=hour, day_of_week_number=day, station_len=len, pct_obs=pct_obs),)))
+end
+```
+
+```{julia}
+@assert all(sensors.predicted_speed_mph .≈ sensors.predicted_speed_mph_parallel)
+```
+
+## Multithreaded combine
+
+Combine with data frames is multithreaded by default, so if you start Julia with multiple threads it will calculate the summary statistics separately by group, unless threading is specifically disabled:
+
+```{julia}
+sensors.date = Dates.Date.(sensors.timestamp)
+sensors.time = Dates.Time.(sensors.timestamp)
+
+"""
+    get_busiest_hour(times, flows)
+
+Find the start of the one-hour period with the maximum total flow. Note that this function could be written more efficiently
+by assuming sorted times, but since we're demonstrating the performance of threading, starting with a somewhat inefficient function
+is okay.
+"""
+function get_busiest_hour(times, flows)
+    best_time = nothing
+    best_flow = typemin(Int64)
+
+    for time ∈ times
+        flow = sum(flows[times .≥ time .&& times .< (time + Hour(1))])
+        if flow > best_flow
+            best_flow = flow
+            best_time = time
+        end
+    end
+
+    return best_time
+end
+```
+
+```{julia}
+# find the busiest hour of each day at each sensor
+@time busiest_hour = @chain sensors begin
+    groupby([:date, :station])
+    @combine(:busiest_hour=get_busiest_hour(:time, :total_flow); threads=false)
+end
+```
+
+
+```{julia}
+# find the busiest hour of each day at each sensor
+@time busiest_hour = @chain sensors begin
+    groupby([:date, :station])
+    @combine(:busiest_hour=get_busiest_hour(:time, :total_flow))
+end
+```
+
+```{julia}
+histogram(busiest_hour.busiest_hour)
+```

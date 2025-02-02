@@ -1,0 +1,132 @@
+---
+title: Functions
+---
+
+```{julia}
+using DataFrames, CSV
+```
+
+Almost every programming language has a way to write "functions"—reusable pieces of code that work just like functions in math. They take some arguments, do something with them, and return some value. These are very useful in any language as they allow you to re-use code rather than writing similar code in many places, but in Julia they play an even more important role as they are critical to performance, as we saw in the last exercise.
+
+The reason comes from one of the fundamental building blocks of the Julia language: _multiple dispatch_. In Julia, functions are compiled separately for each combination of arguments they could be called with. You can write multiple versions of the same function for different types of arguments; for instance, there are  but more often you only write one, and Julia optimizes it for different types of argments. For instance, there are 17 different definitions for the function `exp()`:
+
+```{julia}
+methods(exp)
+```
+
+Most often, though, you will have but a single definition for each function. Julia will still compile separate versions of that function for every combination of argument types it is called with. This is why the first time you call a function with a particular type of arguments, it takes a while. Since Julia doesn't know ahead of time what types of arguments you will use, the first time you call a function with particular arguments it takes a while.
+
+For instance, this function calculate the Herfindahl-Hirschman Index, which is a measure of market concentration.
+
+```{julia}
+function hhi(shares)
+    @assert sum(shares) ≈ 100
+
+    hhi = zero(eltype(shares))
+    for share in shares
+        hhi += share ^ 2
+    end
+
+    return hhi
+end
+```
+
+If we look at  `@code_typed` with a vector of integers, we see that it is using integer math all the way through. We will also see that everything has a concrete numeric type (e.g. Int64, 64-bit integer). This means Julia knows how much memory each item will take up and can allocate them on the stack and avoid garbage collecting them.
+
+```{julia}
+@code_typed hhi([25, 25, 15, 35])
+```
+
+We get a different function body for an array of floats.
+
+```{julia}
+@code_typed hhi([20.5, 29.5, 15.0, 35.0])
+```
+
+`@code_llvm` is much lower level, it shows the LLVM assembly code. This is the last step in the compilation process that is common across CPU architectures (e.g. Intel vs Apple Silicon). We can see that the version using floating point numbers is using more complex operations; it will be somewhat slower.
+
+```{julia}
+@code_llvm hhi([25, 25, 15, 35])
+```
+
+```{julia}
+@code_llvm hhi([20.5, 29.5, 15.0, 35.0])
+```
+
+## Type annotations
+
+If you are struggling with type stability in your functions, you can add _type annotations/assertions_ to the function. You can annotate types in the function signature or elsewhere in the function, using the notation ::Type. Type annotations can be _abstract_ or _concrete_. For instance, this would define the HHI function for only vectors of real numbers (so you would get an error if you called it with something that wasn't a vector, wasn't numbers, or was complex).
+
+```{julia}
+function hhi(shares::AbstractVector{<:Real})
+    @assert sum(shares) ≈ 100
+
+    hhi = zero(eltype(shares))
+    for share in shares
+        hhi += share ^ 2
+    end
+
+    return hhi
+end
+```
+
+You can also have type "parameters" that you can refer to within the function. In this example, T will refer to the actual type of the elements in the shares variable. T is equivalent to eltype(shares) but may be more convenient if writing it out a lot.
+
+```{julia}
+function hhi(shares::AbstractVector{T}) where {T <: Real}
+    @assert sum(shares) ≈ 100
+
+    hhi = zero(T)
+    for share in shares
+        hhi += share ^ 2
+    end
+
+    return hhi
+end
+```
+
+Generally, adding type parameters to the function _signature_ (parameters) does not do improve performance, since Julia is already compiling specialized versions of functions for every combination of argument types. However, adding them elsewhere may. For instance, if you know that your function will return a certain type, you can annotate the return value. Then any code that calls your function will know what type is going to be returned (and if it returns something else, Julia will try to convert it to the type you said, and if it cannot you will get an error). For instance, the function below guarantees that it will return a `T` - that is, a value the same type as the elements of shares. This is not particularly useful for performance in this case, as Julia should have already been able to figure out that this function would return this type, but may be useful in more complex functions.
+
+```{julia}
+function hhi(shares::AbstractVector{T})::T where {T <: Real}
+    @assert sum(shares) ≈ 100
+
+    hhi = zero(T)
+    for share in shares
+        hhi += share ^ 2
+    end
+
+    return hhi
+end
+```
+
+
+It is also possible to put type annotations on variable definitions, which guarantees that that variable will only hold values of that type. This can improve performance significantly depending on what values are getting assigned to the variable.
+
+```{julia}
+function hhi(shares::AbstractVector{T})::T where {T <: Real}
+    @assert sum(shares) ≈ 100
+
+    hhi::T = zero(T)
+    for share in shares
+        hhi += share ^ 2
+    end
+
+    return hhi
+end
+```
+
+and it is possible to put type annotations on values. These are called type assertions (aka typeasserts), and can also improve performance. They basically state that a particular value will be of a particular type, and to give an error otherwise. If code_warntype is telling you that you have unstable types, this does not completely solve the problem, but can help—rather than that type instability making its way through your function, it will end with the type assert. Julia will still have an unstably typed variable in order to check the type, but after that it will know and use the type information.
+
+```{julia}
+function hhi(shares::AbstractVector{T})::T where {T <: Real}
+    @assert sum(shares) ≈ 100
+
+    hhi::T = zero(T)
+    for share in shares
+        hhi += share::T ^ 2
+    end
+
+    return hhi
+end
+```
