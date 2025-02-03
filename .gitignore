@@ -185,4 +185,7 @@ data/bay_area_freeways.csv.gz
 plots/*.png
 !docs/**/*.html
 !docs/**/*_files
+!docs/*.html
+!docs/*_files
+!docs/**/dist
 Manifest.toml
