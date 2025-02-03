@@ -10,6 +10,9 @@ format:
         width: 1920
         height: 1080
         logo: UNC_logo_RGB.png
+        footer: https://projects.indicatrix.org/odum-julia
+execute:
+    eval: false
 ---
 
 ## About me
@@ -28,8 +31,16 @@ format:
     - Plotting
     - Performance improvements
     - Statistical analysis
+    - Modules
 - Brief discussion of more advanced topics
-- Two 10 minute breaks
+
+
+## Getting ready
+
+- Download the code we'll be using [from Github](https://github.com/mattwigway/odum-julia)
+    - click Code > Download ZIP and extract it
+    - or, clone with `git`
+    
 
 
 ## Julia setup
@@ -37,18 +48,9 @@ format:
 - Julia ships with an excellent package manager which we'll discuss in a moment
 - Package manager supports "environments" - collections of packages and versions that can be shared
 - Before we run through our demo, we each need to "instantiate" the environment used for the demo
-
-
-
-## Julia setup
-
-- From JupyterHub, select New > Terminal
-- Type `julia` and press enter
-- Type `]` to enter the package manager
-- Type `activate .` and press enter to activate the environment
-- Type `instantiate` and press enter to retrieve all of the packages
-
-
+- In VSCode, open the folder you just downloaded
+- Type Ctrl/Cmd-shift-P and find and select Julia: Start REPL
+- In the Julia prompt that appears, type `]` to enter the package manager, and then `resolve`
 
 ## What is Julia?
 
@@ -56,8 +58,6 @@ format:
 - Designed for speed and ease of use
 - Geared for science and math
 - Large community writing packages and providing support
-
-
 
 ## Solving the two-language problem
 
@@ -71,7 +71,10 @@ format:
     - Much higher learning curve
     - e.g. C, C++, Fortran, Java
 
+## Download the data
 
+- Open `1 Reading Data into Julia.qmd`
+- Run the first two cells, by clicking the run buttons or putting your cursor in them and pressign Ctrl/Cmd-enter
 
 ## What makes Julia fast?
 
@@ -375,6 +378,8 @@ Abandon all hope, ye who enter here<br/>
 
 - Nothing happened... why?
 - need to call our function. Add `main()` as the last line of the file, and run again
+
+:::
 
 ## Command-line arguments
 
