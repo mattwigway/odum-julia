@@ -177,6 +177,11 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-data
-slides
+data/bay_area_freeways.csv.gz
 .DS_Store
+*.html
+*_files
+*.jls
+plots/*.png
+!docs/
+Manifest.toml
