@@ -1,0 +1,5 @@
+project:
+  title: "Julia course"
+  render:
+    - index.qmd
+  output-dir: ../docs

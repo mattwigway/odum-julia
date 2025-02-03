@@ -1,0 +1,674 @@
+
+---
+title: Analyzing Large Datasets with the Julia Language
+author: Matt Bhagat-Conway
+date: September 27, 2022
+institute: Odum Institute<br/>University of North Carolina at Chapel Hill
+format:
+    revealjs:
+        theme: [default, unc.scss]
+        width: 1920
+        height: 1080
+        logo: UNC_logo_RGB.png
+---
+
+## About me
+
+- Assistant professor in City and Regional Planning and Odum Institute
+- PhD and MA in Geography from Arizona State, BA from UC Santa Barbara
+- Three years as professional software developer before graduate school
+
+
+
+## Outline
+
+- Intro and conceptual discussion
+- Hands on demos of
+    - Reading and manipulating tabular data
+    - Plotting
+    - Performance improvements
+    - Statistical analysis
+- Brief discussion of more advanced topics
+- Two 10 minute breaks
+
+
+## Julia setup
+
+- Julia ships with an excellent package manager which we'll discuss in a moment
+- Package manager supports "environments" - collections of packages and versions that can be shared
+- Before we run through our demo, we each need to "instantiate" the environment used for the demo
+
+
+
+## Julia setup
+
+- From JupyterHub, select New > Terminal
+- Type `julia` and press enter
+- Type `]` to enter the package manager
+- Type `activate .` and press enter to activate the environment
+- Type `instantiate` and press enter to retrieve all of the packages
+
+
+
+## What is Julia?
+
+- Relatively young programming language (just turned 10)
+- Designed for speed and ease of use
+- Geared for science and math
+- Large community writing packages and providing support
+
+
+
+## Solving the two-language problem
+
+- Scientists working with data have long needed two types of language
+- Easy to use, simple, high-level languages
+    - Prototyping and development very efficient
+    - Poor performance at scale
+    - e.g. Python, R
+- More difficult, low-level languages
+    - Can be very fast
+    - Much higher learning curve
+    - e.g. C, C++, Fortran, Java
+
+
+
+## What makes Julia fast?
+
+- Just in time compilation 
+- Code optimization
+
+
+
+## Concepts: compile time and run time
+
+- Compile time: when the Julia compiler examines your code and generated optimized low-level code for your processor to run
+- Run time: when your code is actually executed by the computer
+- Compile time happens once, run time as many times as you do something
+- Most high-level languages do a lot at run time, Julia is fast because it moves more things to compile time
+
+
+
+## What makes Julia fast?
+
+- The _type system_
+    - Julia can usually _infer_ the types of values used in Julia programs (e.g. integer, real, string, etc.)
+    - When types can be inferred, specialized algorithms can be used for those types
+    - Julia relies heavily on _multiple dispatch_, where different versions of a function can be selected based on the types of its arguments
+    - Numeric types are fixed-width (same number of bits), so can be _stack-allocated_
+
+
+
+<!-- _class: blank dark -->
+
+## Using Julia for social science
+
+- Julia is a general-purpose language
+- Data analysis functionality is provided by packages
+    - DataFrames.jl for tabular data manipulation
+    - CSV.jl to read CSV files
+    - StatsBase.jl for descriptive stats
+    - Plots.jl, Gadfly.jl, Makie.jl for plotting
+    - GLM.jl for regression
+    - MLJ.jl for machine learning
+    - Graphs.jl for network analysis
+    - etc...
+
+
+
+## Using Julia for social science
+
+- Julia packages are usually written in Julia, so you can make your own or contribute to existing ones
+
+
+
+## Reasons not to use Julia
+
+- Package ecosystem for social sciece is much more developed in R, Python, Stata, etc.
+- More educational and troubleshooting resources available for other tools
+    - But, the Julia community is very responsive (discourse.julialang.org and Julia Slack)
+- More likely that collaborators are familiar with other tools
+
+
+
+## Reasons to use Julia
+
+- For large datasets
+    - Start considering at around 500mb
+- For computationally intensive algorithms that aren't available in packages
+- For distributed computing
+
+
+
+## The Julia community
+
+- The Julia community is very friendly to newcomers
+- discourse.julialang.org has many questions already answered, and community members are quite responsive if you post a new question
+- Most Julia core developers are in the Julia Slack or Zulip channels, and will respond to questions there as well
+- Julia and package documentation tends to be extensive as well
+
+
+## Recap: loading and cleaning data
+
+- Julia's DataFrames package has tools to work with tabular data
+- You need a separate library to read data (CSV, most often)
+- Any Julia function can be applied to a vector by adding a `.`
+- Missing data is common and represented by a special value `missing`
+- `ismissing` will identify missing data, `skipmissing` skips them for a particular operation, and `coalesce` will return first non-missing argument
+
+
+
+## Recap: plotting
+
+- Plots.jl is a mature and high-performance plotting library
+- The basic format of a plot is `plot(x, y)` or `scatter(x, y)`
+- Appending `!` will add to existing plot
+- `xlabel!` and `ylabel!` label axes
+- `fmt=:png` speeds up very large plots
+- `histogram(data)` will make a histogram
+
+
+
+## Julia performance
+
+- It is easy to write high-performance code in Julia
+- But it is _also_ easy to write slow code in Julia
+- Differences between fast and slow code can be very subtle
+
+
+
+## Julia performance
+
+- The usual culprit in performance problems is _type instability_
+    - ...when Julia can't figure out the type of a variable at compile-time, or the type of the variable changes
+
+## Julia performance: the time-to-first-plot problem (TTFP)
+
+- Unlike other compiled languages, Julia doesn't have a separate compilation phase
+- The first time you use a function with particular types, it is compiled
+- This can be quite slow, especially when compiling large libraries (e.g. Plots)
+- When benchmarking, always look at the performance of the _second_ function call
+
+
+
+## Julia performance tools
+
+- Fortunately, Julia has a lot of tools to help with finding/fixing performance problems
+- We'll cover a few
+- `@time` will time a function call and report heap memory allocations
+- `@code_warntype` will highlight areas where Julia couldn't figure out the type of variables
+
+
+## Using functions for performance
+
+- Performance-critical code should always be inside a function
+- Functions get compiled for every combination of argument types (this is known as _multiple dispatch_)
+- Don't refer to (non-constant) global variables in functions; pass variables as arguments
+- This is important because then Julia knows the size of all the variables in the function, and can allocate them on the _stack_ instead of the _heap_
+- This improves _memory locality_ which is important for performance
+- Heap memory must be garbage-collected, adding overhead, and is not in the same part of memory as other stack-allocated functions
+
+## Advanced topics: multithreading and multiprocessing
+
+Premature optimization is the root of all evil<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;—Sir Tony Hoare/Donald Knuth
+
+Danger, Will Robinson!<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;—Robot
+
+Abandon all hope, ye who enter here<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;—Dante
+
+<!-- _class: dark blank -->
+
+## Advanced topics: multithreading vs multiprocessing
+
+- Multithreading uses multiple _threads_ within a single _process_ on a single computer
+    - Threads share memory/variables
+    - Saves memory, but prone to _race conditions_
+    - Low overhead
+
+## Advanced topics: multithreading vs multiprocessing
+
+- Multiprocessing uses multiple processes on one or more computers
+    - Process don't share memory but communicate by passing information between them
+    - Uses more memory, but allows dividing of processing across machines
+    - High overhead
+
+## Advanced topics: multithreading
+
+- Julia has built-in support for multithreading
+- Start Julia with additional threads with `-t <num_threads>`
+- Make for loops parallel with `Threads.@threads for`
+- Avoid data races!
+- Ensure packages are threadsafe
+
+## Advanced topics: multiprocessing
+
+- Julia provides `Distributed` module to support multiprocessing
+- One main process sends commands and data to be executed to other processes
+- You can start Julia with multiple processes on one machine using `-p <num_processes>`
+- If you want to use a cluster, you will need a _cluster manager_, of which there are many
+    - UNC Dogwood cluster uses Slurm, which you can use from Julia with `SlurmClusterManager`
+
+## Package management in Julia
+
+- Research projects in Julia often rely on dozens or hundreds of packages, directly or indirectly
+- By default, packages are installed into a "global environment" - meaning all your Julia projects share the same set of packages
+- Best practice is to use per-project environments - so each project has its own set of packages
+- This makes it easy to share code with others, or come back to it in a few years, without version compatibility issues
+
+
+
+<!-- _class: blank dark -->
+
+## Package management in Julia
+
+- Julia has a built-in package manager accessible from REPL
+    - REPL: read-evaluate-print loop, known as command prompt or console in other languages
+- Any folder can be a Julia environment
+- To activate a Julia environment, at Julia prompt type `]activate <env>`
+    - To activate the current directory, `]activate .`
+- An environment has files `Project.toml` and `Manifest.toml` which track installed packages
+- If a directory isn't already an environment, activating it will create the environment
+
+
+
+## Live demo
+
+- Choose `+` then `Terminal` in JupyterLab
+- Type `julia` to start the Julia REPL
+- Activate the environment in the current directory
+- Add the `GLM`, `MLJ`, `StatsModels`, `DecisionTree`, and `MLJDecisionTreeInterface` packages for our statistics demo
+    - type `add GLM MLJ StatsModels DecisionTree MLJDecisionTreeInterface`
+
+
+
+## Statistics in Julia
+
+- There are lots of packages for statistics in Julia
+- We'll be using four
+    - `StatsBase` for descriptive statistics
+    - `GLM` for linear regression and GLMs
+    - `MLJ` and `DecisionTree` for random forests
+
+ 
+
+## Statistics in Julia: recap
+
+- The `GLM` library provides (generalized) linear regression functions
+- `MLJ` is an interface to a lot of different machine learning packages
+
+<a href="#41">.</a>
+
+
+## Using Julia without notebooks
+
+- At some point you probably will want to run Julia in a non-interactive environment
+    - _e.g._ a compute cluster
+- Instead of using a notebook, you can just put your Julia code into a file
+- Everything should be in a function for best performance, except for one line that calls the main function
+- You will have to explicitly use `println` or `@info` (with the `Logging` package) to show results
+
+## Using Julia without notebooks
+
+- Let's move our linear regression model to a Julia script file so that we can run it without the notebook interface (e.g. on Longleaf)
+- We'll create a single `main()` function that runs the linear regression
+- We'll call the `main()` function at the end of our script
+- In a larger project you'd probably want to split your code into multiple functions, and maybe multiple files
+
+## Using Julia without notebooks
+
+- Create a new text file and call it `regression.jl`
+- I always like to start my code files with a comment explaining the file. In Julia, comments start with `#`:
+```julia
+## In this file we estimate a linear regression model
+## of traffic volumes
+```
+
+## Using Julia without notebooks
+
+- We can copy the code we need from the Statistics notebook
+- Like in a notebook, we first have to tell Julia what libraries we're using
+- Copy the line starting with `using ...` into your script file
+
+
+## Using Julia without notebooks
+
+- Copy the data loading code into the first lines of the main function, between `function main()` and `end`
+- Copy the code that loads and joins to the `sensor_meta` file below that
+- And the code that creates the `hour` and `day_of_week` columns below that
+- And finally, copy the code that runs the final model below that
+
+## Using Julia without notebooks
+
+- Unlike in a notebook, running a Julia script doesn't provide any output unless you explicitly tell it to
+- We can use the `Logging` package built into Julia to add "log statements" to let us know what's happening
+- Add `Logging` to your `using ...` line
+
+## Logging in Julia
+
+- The Logging package provides four statements to print information
+    - `@debug`, `@info`, `@warn`, and `@error`
+- Use like `@info "reading CSV file"`
+- These should be used for different priority messages
+- Debug is not shown by default, but can be enabled for troubleshooting
+- Others are color-coded where supported - `@info` is blue, `@warn` is yellow, and `@error` is red
+
+## Logging in Julia
+
+- Add `@info` statements to your file before the data is loaded, before the variables are created, and before the model is run
+
+## Output in Julia
+
+- For things that are not log statements, but just program output, use `println` or `show`
+- Add `show(model)` to the end of your `main()` function
+
+## Running the Julia script
+
+- Type `julia --project regression.jl`
+- This runs the `julia` program, tells it to use the project in the current directory (so our packages are available), and then run `regression.jl`
+
+## Running the Julia script
+
+::: {.incremental}
+
+- Nothing happened... why?
+- need to call our function. Add `main()` as the last line of the file, and run again
+
+## Command-line arguments
+
+- Our input data might not always be in the same place
+    - Maybe we want to run the same script on multiple files, or are running on a compute cluster with a different storage architecture
+- We can use command-line arguments to specify the file path at run time
+- Then we can run
+    `julia --project regression.jl data/my_file.csv`
+
+## Command-line arguments
+
+- To read arguments from the command line, we'll use another Julia package: `ArgParse`
+- First, add ArgParse to your environment
+
+## Parsing command line arguments
+
+- Add `ArgParse` to the `using` statement at the top of your file
+- Add the following to the top of your `main` function
+
+```julia
+s = ArgParseSettings()
+@add_arg_table! s begin
+    "filename"
+        help = "file name to process"
+        required = true
+end
+parsed_args = parse_args(ARGS, s)
+```
+
+## Parsing command line arguments
+
+- Replace the filename in the `CSV.read` function call with `parsed_args["filename"]`
+
+## Running with command line arguments
+
+- Run your script again with no arguments:
+    `julia --project regression.jl`
+- You should get an error
+
+## Running with command line arguments
+
+- Run your script again, but ask for help:
+    `julia --project regression.jl --help`
+
+## Running with command line arguments
+
+- Run your script again with the argument:
+    `julia --project regression.jl data/bay_area_freeways.csv`
+- You should once again get your regression output
+
+## Options
+
+- It's also possible to have options - things that have a default but you can change from the command line
+- Our script takes a while to run. Let's add a sample option to speed things up, that will run the regression on a random sample of 10,000 rows of data
+
+## Options
+
+- Add to your argument table in your code
+```julia
+    "--sample"
+        help = "estimate on only first 10,000 rows"
+        action = :store_true
+```
+
+## Options
+
+- Add to your code after reading the CSV
+
+```julia
+if parsed_args["sample"]
+    sensors = sensors[shuffle(1:nrow(sensors))[1:10_000],:]
+end
+```
+
+## Options
+
+- Run again with the `--sample` option. It should be a bit quicker.
+        `julia --project regression.jl --sample data/bay_area_freeways.csv`
+
+## Options
+
+- Can also have options with values
+    - e.g., maybe `--sample 5000` to sample 5000 rows
+- See [`ArgParse.jl` documentation](https://carlobaldassi.github.io/ArgParse.jl/stable/)
+
+
+## Project organization in Julia
+
+- Notebooks are convenient, but can quickly get out of hand
+- Most large projects will have many notebooks and scripts with some common functionality
+- Having code duplicated leads to errors and maintenance hassles
+- Any common code should go in a module which is referenced in the notebook interface
+
+## Why modules?
+
+As a project grows, it may outgrow a single notebook. But there are often blocks of code that are common between notebooks, for instance to clean data or perform some basic but project specific analysis. It is unwise to copy the same code into multiple files/notebooks, because it is hard to keep track of. The first step is to encapsulate this code within functions. You can just move these functions into `.jl` files, but it's not much harder to create a full-fledged Julia package, and this brings a number of advantages.
+
+## Creating a package/module
+
+We are going to create a package that encapsulates a few functions useful for working with the sensor data. The basic structure of a Julia package is something like this:
+
+- Project.toml
+- Manifest.toml (possibly)
+- src
+    - NameOfPackage.jl
+    - other julia files
+- test (optional but recommended)
+    - runtests.jl
+    - other julia files
+
+## Updating Project.toml
+
+We already have a Project.toml and Manifest.toml file. A few changes are needed to our Project.toml are needed for Julia to treat your folder as a package. Specifically, you need to include the following the Project.toml file.
+
+```
+name = "CAFreewaySensors"
+uuid = "uuid-of-package"
+authors = ["Your Name 1 <you@example.com>"]
+version = "0.0.1"
+```
+
+The UUID is just a random identifier; you can generate one from the julia REPL with
+
+```{julia}
+julia> using UUIDs
+julia> UUIDs.uuid4()
+UUID("ce75a596-b34f-4fdc-a3d7-990164633cf4")
+```
+
+## The main source file
+
+- The only required Julia file is `src/CAFreewaySensors.jl`
+- It must defne the module, and look like this:
+
+```{julia}
+module CAFreewaySensors
+... your package code here ...
+end
+```
+
+## Importing packages
+
+- If your module relies on other modules, it is considered bad form to use `using`
+- This can cause unexpected errors if the modules you use add functionality
+    - e.g. if you're using `mean` from `StatsBase`, and `MLJ` adds a `mean` function
+- Instead, we use the import statement, which takes two forms:
+    - `{julia} import StatsBase`
+    - `{julia} import StatsBase: mean, median`
+- In the first case, you will have to explicitly refer to all functions within `StatsBase` as e.g. `StatsBase.mean`
+- In the second case, you can use `mean` and `median` directly without prefixing, but any other function (e.g. `StatsBase.sample`) will be inaccessible
+- Can combine the two
+
+## Exporting functions
+
+- Any function you want to be available in notebooks or scripts after running `using CAFreewaySensors` without writing `CAFreewaySensors.` needs to be _exported_
+- You can export one or more functions with an `export` statement, e.g.
+    - `export vehicle_density, per_lane_density`
+- You can also mark functions as public (i.e. acceptable for use outside the package) without exporting them by using the `public` keyword
+    - `public vehicle_density`
+- This is just for documentation; you will still need to use `CAFreewaySensors.` to access these functions, and you can use that syntax to access even functions not declared public
+
+## Includes
+
+- Most packages have relatively little code in their main file
+- Mostly, they have _includes_ that bring in other files
+    - `include("file.jl")` makes it as if the contents of `file.jl` were pasted into the file including it
+
+
+## The main source file
+
+- By convention, the main source file includes
+    - imports
+    - exports
+    - public
+    - includes
+    - and nothing else
+    - e.g. [one of my packages](https://github.com/mattwigway/MissingLinks.jl/blob/main/src/MissingLinks.jl)
+- Some very small packages will just have one main file and no others includes
+
+## Making your package
+
+- Let's create a file `stats.jl` and write these two functions:
+
+```{julia}
+vehicle_density(flow, speed_mph) = flow / speed_mph
+
+per_lane_vehicle_density(flow, speed_mph, lanes) = flow / speed_mph / lanes
+```
+
+- Include it in `CAFreewaySensors.jl`
+- Export both of the functions
+- Update the regression file to calculate per lane vehicle density and use that as the dependent variable
+
+## Working with modules live
+
+- The `Revise` package will automatically update loaded module code when you change it
+
+## Testing
+
+- There are two competing test frameworks for Julia: `Test.jl` which ships with Julia, and `TestItemRunner`
+- I prefer `TestItemRunner` because it integrates well with VSCode
+
+## Setting up runtests
+
+- When you run all tests, the file `test/runtests.jl` gets run
+- Include this code there:
+
+```{julia}
+using TestItemRunner
+
+@run_package_tests
+```
+
+## Splitting tests across files
+
+- I like to split my tests across logically organized files in the `test/` folder
+- Add a `test_density.jl` file in the `test/` folder
+- Include this code:
+
+```{julia}
+@testitem "Density" begin
+    @test vehicle_density(4000, 50) == 80.0
+    @test per_lane_vehicle_density(4000, 50, 2) == 40.0
+end
+```
+
+## Project organization: recap
+
+- It's a good idea to put common functionality in a module
+- `Revise` will let you edit these files while your notebooks are running without restarting Julia
+
+<a href="#41">.</a>
+
+## Publishing modules
+
+- Publishing modules for others to use is beyond the scope of this course, but [is not that hard](https://julialang.org/contribute/developing_package/)
+- If you're making a module for others to use, I recommend starting by using [PkgTemplates.jl](https://juliaci.github.io/PkgTemplates.jl/stable/) instead of the manual approach shown here
+
+## Advanced topics: linear algebra
+
+- Julia has built-in support for _n_-dimensional matrices
+- Built-in library `LinearAlgebra` provides many matrix operations
+- Many space efficient specialized matrix types such as symmetrical, tridiagonal, etc.
+
+
+
+## Advanced topics: GPU support
+
+- Julia supports NVIDIA, AMD, and Intel GPUs through the `CUDA`, `AMDGPU`, and `oneAPI` packages
+- Good for large array operations that can be run in parallel (thousands of simultaneous processes working on different parts of the array)
+- Tutorial: https://www.youtube.com/watch?v=Hz9IMJuW5hU
+
+
+
+## What people are using Julia for
+
+- Astrophysics (Celeste.jl)
+- Weather and climate modeling (CliMA project)
+- Financial analysis (many private organizations)
+- Economic forecasting (Federal Reserve Bank of NY)
+- Electricity demand forecasting (Électricité de France)
+- Migration modeling (Jakub Bijak)
+
+
+
+## Recap and additional resources
+
+<a name="end"></a>
+
+- Julia provides a high-performance environment for data analysis
+- Most functionality in Julia is provided by packages
+- Julia is fast because it can infer the types of data and variables
+- If you write your code such that it _can't_ infer types, it will be slow
+    - Most commonly due to iterating over a DataFrame, or not writing code in a function
+    - Check with `@time` and `@code_warntype`
+
+
+
+## Recap and additional resources
+
+- Environments or projects are a way to keep a consistent set of packages and versions across team members
+- Many statistical functions are available, but most are in packages (even `mean`!)
+- Larger projects with multiple notebooks should put common code into files
+- Julia scripts can contain the same code as notebooks, but should have all code in functions
+
+
+
+## Recap and additional resources
+
+- Julia documentation: docs.julialang.org
+- Julia Discourse: discourse.julialang.org
+- JuliaCon: juliacon.org
+- Julia Slack
+- Package documentation
+- Demos from this course: github.com/mattwigway/odum-julia
+
+<div style="text-align: center; margin-top:30px">Matt Bhagat-Conway<br/>mwbc@unc.edu</div>
