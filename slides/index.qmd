@@ -2,7 +2,6 @@
 ---
 title: Analyzing Large Datasets with the Julia Language
 author: Matt Bhagat-Conway
-date: September 27, 2022
 institute: Odum Institute<br/>University of North Carolina at Chapel Hill
 format:
     revealjs:
