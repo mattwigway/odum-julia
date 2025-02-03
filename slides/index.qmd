@@ -10,6 +10,7 @@ format:
         height: 1080
         logo: UNC_logo_RGB.png
         footer: https://projects.indicatrix.org/odum-julia
+        slide-number: true
 execute:
     eval: false
 ---
