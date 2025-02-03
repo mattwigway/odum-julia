@@ -183,5 +183,6 @@ data/bay_area_freeways.csv.gz
 *_files
 *.jls
 plots/*.png
-!docs/*
+!docs/**/*.html
+!docs/**/*_files
 Manifest.toml
